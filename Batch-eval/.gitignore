@@ -1,0 +1,11 @@
+# Secrets / 自動生成
+eval/.env
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Bicep build 出力
+*.json.tmp

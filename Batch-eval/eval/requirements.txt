@@ -1,0 +1,11 @@
+# Agent 評価基盤 (バッチ評価) Python 依存関係
+# Foundry 新 SDK + OpenAI 互換 evals API + トレース計装
+
+azure-ai-projects>=2.2.0
+azure-identity>=1.19.0
+openai>=1.60.0
+python-dotenv>=1.0.1
+
+# 検証用エージェントのトレース計装（App Insights へ OTel 送信）
+azure-monitor-opentelemetry>=1.6.0
+opentelemetry-sdk>=1.30.0
