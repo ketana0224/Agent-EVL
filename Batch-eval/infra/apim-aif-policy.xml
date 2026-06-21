@@ -1,0 +1,23 @@
+<policies>
+    <inbound>
+        <base />
+        <!-- APIM のマネージド ID で Foundry (Agents API) 用トークンを取得 -->
+        <authentication-managed-identity resource="https://ai.azure.com" output-token-variable-name="aif-aad-token" ignore-error="false" />
+        <!-- 取得した Bearer トークンを Authorization ヘッダーに付与 -->
+        <set-header name="Authorization" exists-action="override">
+            <value>@("Bearer " + (string)context.Variables["aif-aad-token"])</value>
+        </set-header>
+        <!-- クライアントの APIM サブスクリプションキーはバックエンドへ渡さない -->
+        <set-header name="api-key" exists-action="delete" />
+        <set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" />
+    </inbound>
+    <backend>
+        <forward-request />
+    </backend>
+    <outbound>
+        <base />
+    </outbound>
+    <on-error>
+        <base />
+    </on-error>
+</policies>

@@ -1,0 +1,8 @@
+# シークレットを含む生成物（コミットしない）
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -13,27 +13,43 @@ Azure リソースの構築（Bicep）、検証用エージェントの作成、
 ```
 Agent-EVL/
 ├── README.md                         # このファイル（このリポジトリの単一ドキュメント）
-└── Batch-eval/                       # バッチ評価 / トレース評価 基盤一式
+├── mcp/                               # Contoso ポリシー MCP サーバー（FastMCP / ACA ホスト）
+│   ├── README.md                     # MCP 単独デプロイ手順
+│   ├── server.py                      # FastMCP サーバー（streamable-http, 4ツール + APIキー認証）
+│   ├── requirements.txt
+│   ├── Dockerfile                     # ACA 用コンテナー定義
+│   ├── smoke_test.py                  # MCP クライアント疎通テスト
+│   ├── deploy-mcp.ps1                 # ポリシー MCP サーバーを ACA へデプロイ
+│   └── data/
+│       └── policies.json              # ポリシーデータ（決定的応答の元）
+├── agent-aif-prompt-agent/             # Foundry プロンプトエージェント（独立／エージェントコードのみ）
+│   ├── README.md                     # 単独セットアップ手順
+│   ├── create_agent.py               # プロンプトエージェント作成・呼び出し（単発/対話/サンプル）
+│   ├── agent_config.py               # .env 読み込み + クライアント取得（自己完結）
+│   └── scripts/                      # setup-env（ps1 + sh）—— .env 生成のみ（インフラ不要）
+├── agent-custom-MAF-ACA/              # MAF 製カスタムエージェント（Azure Container Apps ホスト）
+│   ├── README.md                     # 単独デプロイ手順
+│   ├── app/                          # FastAPI アプリ（/chat・MCP ツールを @tool 化）
+│   ├── Dockerfile                    # ACA 用コンテナー定義（--pre 解決）
+│   ├── requirements.txt
+│   ├── smoke_test.py                 # /chat 疎通テスト
+│   ├── deploy-aca.ps1                # Container Apps へデプロイ + RBAC 付与
+│   └── PortalからAPIMに登録.md        # APIM(AI Gateway) 経由公開の手順書
+├── ms-foundry-observability/          # Foundry 可観測性 環境構築（独立／Bicep + デプロイ）
+│   ├── README.md                     # 単独デプロイ手順
+│   ├── infra/
+│   │   ├── main.bicep                # サブスクリプション スコープ（RG 新規作成）
+│   │   ├── main.bicepparam           # 検証環境パラメーター
+│   │   └── modules/
+│   │       └── resources.bicep       # RG スコープ リソース本体（Foundry・モデル・App Insights・Log Analytics）
+│   └── scripts/
+│       ├── deploy.ps1                # PowerShell デプロイ（Windows 既定）
+│       ├── deploy.sh                 # Bash デプロイ
+│       └── teardown.ps1              # 削除（RG 削除 + Foundry purge）
+└── Batch-eval/                       # バッチ評価 / トレース評価 実行コード一式
     ├── .env.example
     ├── infra/
-    │   ├── main.bicep                # サブスクリプション スコープ（RG 新規作成）
-    │   ├── main.bicepparam           # 検証環境パラメーター
-    │   └── modules/
-    │       └── resources.bicep       # RG スコープ リソース本体
-    ├── scripts/
-    │   ├── deploy.ps1                # PowerShell デプロイ（Windows 既定）
-    │   ├── deploy.sh                 # Bash デプロイ
-    │   ├── deploy-mcp.ps1            # ポリシー MCP サーバーを ACA へデプロイ
-    │   └── teardown.ps1              # 削除（RG 削除 + Foundry purge / ACA・ACR も含む）
-    ├── agent/
-    │   └── create_agent.py           # 検証用エージェント作成（MCP ツール付き）+ トレース生成
-    ├── mcp/
-    │   ├── server.py                 # FastMCP サーバー（streamable-http, 4ツール + APIキー認証）
-    │   ├── requirements.txt
-    │   ├── Dockerfile                # ACA 用コンテナー定義
-    │   ├── smoke_test.py             # MCP クライアント疎通テスト
-    │   └── data/
-    │       └── policies.json         # ポリシーデータ（決定的応答の元）
+    │   └── apim-aif-policy.xml       # APIM ポリシー（Foundry 用 MI トークン付与）
     └── eval/
         ├── requirements.txt
         ├── _common.py                # クライアント取得ユーティリティ
@@ -50,7 +66,7 @@ Agent-EVL/
 | 機能 | 内容 |
 |---|---|
 | インフラ構築 | Foundry アカウント / プロジェクト、ジャッジ用 GPT デプロイ、App Insights + Log Analytics を Bicep で一括作成 |
-| 検証用エージェント | `agent/create_agent.py` で Contoso サポート エージェントを作成。MCP ツールを付与し評価対象トレースを生成 |
+| 検証用エージェント | 2 種類のエージェントを評価対象として作成できます:<br/>・[`agent-aif-prompt-agent/`](./agent-aif-prompt-agent/) — Contoso サポート **プロンプトエージェント**（Foundry フルマネージド／コード不要）<br/>・[`agent-custom-MAF-ACA/`](./agent-custom-MAF-ACA/) — **Microsoft Agent Framework (MAF) 製カスタムエージェント**を Azure Container Apps にホスト（`/chat` REST API・MCP ツール連携）。いずれも MCP ツールを付与し評価対象トレースを生成 |
 | ポリシー MCP | `mcp/server.py`（FastMCP / streamable-http）を Azure Container Apps に公開。返品・配送・支払い・ポイントの 4 ツールを提供 |
 | バッチ評価 | データセット（JSONL）に対し `coherence` / `relevance` / `groundedness` / `f1_score` で採点 |
 | トレース評価 | App Insights の `invoke_agent` スパンを `task_adherence` / `tool_call_accuracy` で採点（preview） |
@@ -90,8 +106,9 @@ flowchart LR
 - リージョンは **East US 2**、Resource Group は `rg-` プレフィックスで新規作成
 - 対象サブスクリプションに対する **共同作成者 + ユーザーアクセス管理者**（または Owner）相当の権限（RBAC 付与を伴うため）
 
-> テナント / サブスクリプションは環境変数 `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID`、
-> または現在の `az` ログイン コンテキストから取得します（スクリプトにハードコードしていません）。
+> テナント / サブスクリプションは次の優先順位で取得します（スクリプトにハードコードしていません）。
+> 1. **推奨**: 利用する Azure 環境へ `az login` でログインし、その `az` ログイン コンテキストから取得
+> 2. 環境変数 `AZURE_TENANT_ID` / `AZURE_SUBSCRIPTION_ID` で明示的に設定することも可能
 
 ---
 
@@ -102,14 +119,14 @@ flowchart LR
 PowerShell（Windows 既定）:
 
 ```powershell
-cd Batch-eval\scripts
+cd ms-foundry-observability\scripts
 ./deploy.ps1
 ```
 
 Bash:
 
 ```bash
-cd Batch-eval/scripts
+cd ms-foundry-observability/scripts
 chmod +x deploy.sh && ./deploy.sh
 ```
 
@@ -117,60 +134,57 @@ chmod +x deploy.sh && ./deploy.sh
 1. テナント/サブスクリプションへのログイン・設定
 2. `infra/main.bicep` のデプロイ（RG・Foundry・モデル・App Insights・接続）
 3. RBAC 付与（実行ユーザー → `Foundry User`、プロジェクト MI → `Monitoring Reader` / `Log Analytics Reader`）
-4. `eval/.env` の生成
+4. `ms-foundry-observability/.env` の生成（評価コードはこの `.env` を読み込んで利用）
 
 > RBAC をスキップする場合は `./deploy.ps1 -SkipRbac`（または `SKIP_RBAC=true ./deploy.sh`）。
 
 ### 2. Python 環境の準備
 
+仮想環境はリポジトリルートに 1 つ作成して各ステップで共用します。
+依存は **フォルダーごとに `requirements.txt` が分かれている**ため、各ステップでその都度 `pip install` します。
+
 ```powershell
-cd ..\eval
+cd ..\..                       # リポジトリルートへ戻る
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
 ```
 
-### 3. データセット バッチ評価の実行
-
-```powershell
-python run_batch_eval.py
-```
-
-`data/sample-eval.jsonl` をアップロードし、`coherence` / `relevance` / `groundedness` / `f1_score`
-で採点します。完了後、行ごとの `score` / `label` と `report_url` を出力します。
-
-### 4. ポリシー MCP サーバーのデプロイ（Azure Container Apps）
+### 3. ポリシー MCP サーバーのデプロイ（Azure Container Apps）
 
 エージェントのプロンプト（返品・配送・支払い・ポイント）に対応した MCP ツールを
 Azure Container Apps 上に公開します。
 
 ```powershell
-cd ..\scripts
+cd mcp
+pip install -r requirements.txt
 ./deploy-mcp.ps1
 ```
 
 `az containerapp up --source` でクラウドビルド＆デプロイし、公開 HTTPS URL と API キーを
-生成して `eval/.env` に `CONTOSO_MCP_URL` / `CONTOSO_MCP_KEY` として追記します。
+生成して `Batch-eval/eval/.env` に `CONTOSO_MCP_URL` / `CONTOSO_MCP_KEY` として追記します。
 公開ツール: `get_return_policy` / `get_shipping_policy` / `get_payment_policy` / `get_loyalty_points`。
 認証はカスタムヘッダー `x-contoso-key`（ASGI ミドルウェアで検証）。
 
-疎通確認:
+疎通確認（`mcp` フォルダーにいる状態、ルートの .venv を使用）:
 
 ```powershell
-cd ..\mcp
-.\.venv\Scripts\python.exe smoke_test.py $env:CONTOSO_MCP_URL $env:CONTOSO_MCP_KEY
+python smoke_test.py $env:CONTOSO_MCP_URL $env:CONTOSO_MCP_KEY
 ```
 
-### 5. 検証用エージェントの作成（MCP ツール付き / トレース生成）
+### 4. 検証用プロンプトエージェントの作成（MCP ツール付き / トレース生成）
+
+[`agent-aif-prompt-agent/`](./agent-aif-prompt-agent/) で既存プロジェクト上にプロンプトエージェントを作成します（追加リソース不要）。
 
 ```powershell
-cd ..\eval
-python ..\agent\create_agent.py
+cd agent-aif-prompt-agent
+./scripts/setup-env.ps1        # ms-foundry-observability/.env から .env を生成
+python -m pip install -r requirements.txt
+python create_agent.py         # サンプル質問でトレース生成
 ```
 
 `CONTOSO_MCP_URL` / `CONTOSO_MCP_KEY` が設定済みなら、エージェントへ `mcp` ツール
 （`server_label=contoso-policy`, `require_approval=never`）を付与した新バージョンを作成します。
-出力された `AGENT_ID`（例 `contoso-support-agent:2`）を `eval/.env` の `AGENT_ID` に追記します。
+出力された `AGENT_ID`（例 `contoso-support-agent:2`）を `Batch-eval/eval/.env` の `AGENT_ID` に追記します。
 
 #### 参考質問（動作確認用）
 
@@ -191,31 +205,86 @@ python ..\agent\create_agent.py
 > - 存在しない顧客ID「C-9999 のポイント残高は？」→ ツールを呼んだ上で「該当顧客なし／確認が必要」と返すか
 > - ポリシー外「実店舗の営業時間は？」→ 範囲外として**確認が必要**と伝えるか
 
-### 6. トレース評価（preview）の実行
+### 5. カスタムエージェント（MAF / ACA ホスト）のデプロイ
 
-ingestion 遅延（数分）を待ってから:
+[`agent-custom-MAF-ACA/`](./agent-custom-MAF-ACA/) の **Microsoft Agent Framework (MAF)** 製
+カスタムエージェントを Azure Container Apps にホストし、`/chat` REST API として公開します。
+MCP ツール（返品・配送・支払い・ポイント）を `@tool` として束ね、評価対象のトレースを生成します。
 
 ```powershell
-python run_trace_eval.py
+cd agent-custom-MAF-ACA
+pip install -r requirements.txt
+./deploy-aca.ps1              # Container Apps へデプロイ + マネージド ID / RBAC 付与
 ```
 
-App Insights の `invoke_agent` スパンを `task_adherence`（タスク遵守度）と
-`tool_call_accuracy`（ツール呼び出し正確性）で採点します。
-`tool_call_accuracy` は `query` / `response` / `tool_calls` / `tool_definitions` の
-`data_mapping`（traces シナリオでは `{{item.*}}`）が必須で、MCP ツールを持つ本エージェント向けです。
-
-### 7. 後片付け
+デプロイ後、公開 URL の `/chat` で疎通確認できます:
 
 ```powershell
-cd ..\scripts
+python smoke_test.py https://<your-app>.azurecontainerapps.io
+```
+
+APIM（AI Gateway）経由で公開する手順は
+[`agent-custom-MAF-ACA/PortalからAPIMに登録.md`](./agent-custom-MAF-ACA/PortalからAPIMに登録.md)、
+構成・実装の詳細は [`agent-custom-MAF-ACA/README.md`](./agent-custom-MAF-ACA/README.md) を参照してください。
+
+### 6. 後片付け
+
+```powershell
+cd ..\..\ms-foundry-observability\scripts
 ./teardown.ps1
 ```
 
 ---
 
+## 📊 評価（Evaluation）
+
+評価対象（プロンプトエージェント / カスタムエージェント）が生成する応答・トレースに対して採点します。
+方式は大きく 2 つです。
+
+| 方式 | 対象 | タイミング | 主な評価器 |
+|---|---|---|---|
+| バッチ評価 | データセット（JSONL） | オフライン（任意） | `coherence` / `relevance` / `groundedness` |
+| 継続的評価 | 本番トレース（App Insights） | オンライン（継続） | `task_adherence` / `tool_call_accuracy` |
+
+### バッチ評価（Batch Evaluation）
+
+#### 概要
+
+事前に用意したテストデータ（質問と期待値）に対し、ジャッジモデルで一括採点します。
+リグレッション確認やプロンプト改善前後の比較に向いています。
+
+#### テストデータの作成
+
+評価データセットは **JSONL（1 行 1 ケース）** で、`query` / `response` / `context` /
+`ground_truth` などのフィールドを持ちます。サンプルは
+[`Batch-eval/eval/data/sample-eval.jsonl`](./Batch-eval/eval/data/sample-eval.jsonl) を参照。
+上記「参考質問」テーブルをベースに、期待回答の要点を `ground_truth` として作成できます。
+
+#### Portal からの実行
+
+1. Foundry ポータルで対象プロジェクトを開く
+2. 左メニュー **［評価（Evaluation）］→［新しい評価］**
+3. 作成した **データセット（JSONL）** をアップロード
+4. 評価器を選択（`coherence` / `relevance` / `groundedness`）
+5. **ジャッジモデル**（例 `gpt-4.1-mini`）を選択して実行
+6. 完了後、行ごとの `score` / `label` と全体の pass rate を確認
+
+> SDK / CLI からの実行（`run_batch_eval.py`）や評価器の詳細設定、スコアの読み方は
+> [`Batch-eval/README.md`](./Batch-eval/README.md) を参照してください。
+
+### 継続的評価（Continuous Evaluation）
+
+> 🚧 **準備中（プレースホルダ）**
+>
+> 本番トレース（App Insights の `invoke_agent` スパン）を継続的に採点する方式です。
+> `task_adherence`（タスク遵守度）/ `tool_call_accuracy`（ツール呼び出し正確性）などを用います。
+> 手順は今後追記予定です。
+
+---
+
 ## 🔧 パラメーターのカスタマイズ
 
-`Batch-eval/infra/main.bicepparam` を編集して変更できます。
+`ms-foundry-observability/infra/main.bicepparam` を編集して変更できます。
 
 | パラメーター | 既定値 | 説明 |
 |---|---|---|
@@ -233,8 +302,10 @@ cd ..\scripts
 
 - 実際の設定値は `Batch-eval/eval/.env`（**Git 管理外**）に格納します。雛形は
   [`Batch-eval/.env.example`](./Batch-eval/.env.example) を参照。
-- `deploy.ps1` / `deploy-mcp.ps1` が `eval/.env` を自動生成・追記します
-  （`PROJECT_ENDPOINT` / `APPLICATIONINSIGHTS_*` / `CONTOSO_MCP_URL` / `CONTOSO_MCP_KEY` など）。
+- 環境構築（`ms-foundry-observability/scripts/deploy.ps1` / `deploy.sh`）は
+  `ms-foundry-observability/.env` を生成します。その内容を `Batch-eval/eval/.env` にコピーして評価コードから利用します
+  （`PROJECT_ENDPOINT` / `APPLICATIONINSIGHTS_*` など）。
+- `mcp/deploy-mcp.ps1` は MCP の公開 URL / キー（`CONTOSO_MCP_URL` / `CONTOSO_MCP_KEY`）をコンソール出力します。
 - `_` で始まるフォルダ（`_report` / `_task` 等）は `.gitignore` で除外しています。
 
 ---

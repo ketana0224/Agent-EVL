@@ -42,6 +42,49 @@ _PORT = int(os.environ.get("PORT", "8000"))
 mcp = FastMCP("contoso-policy", host=_HOST, port=_PORT)
 
 
+# 支払い方法の別名（英語・ローマ字・略称）→ 正式名称（policies.json のキー）
+_PAYMENT_METHOD_ALIASES = {
+    "クレジットカード": "クレジットカード",
+    "クレカ": "クレジットカード",
+    "credit_card": "クレジットカード",
+    "creditcard": "クレジットカード",
+    "credit card": "クレジットカード",
+    "credit": "クレジットカード",
+    "card": "クレジットカード",
+    "デビットカード": "デビットカード",
+    "デビット": "デビットカード",
+    "debit_card": "デビットカード",
+    "debitcard": "デビットカード",
+    "debit card": "デビットカード",
+    "debit": "デビットカード",
+    "コンビニ支払い": "コンビニ支払い",
+    "コンビニ": "コンビニ支払い",
+    "convenience_store": "コンビニ支払い",
+    "convenience store": "コンビニ支払い",
+    "konbini": "コンビニ支払い",
+    "銀行振込": "銀行振込",
+    "振込": "銀行振込",
+    "bank_transfer": "銀行振込",
+    "bank transfer": "銀行振込",
+    "電子マネー": "電子マネー",
+    "e_money": "電子マネー",
+    "emoney": "電子マネー",
+    "electronic money": "電子マネー",
+    "contoso ポイント": "Contoso ポイント",
+    "contoso point": "Contoso ポイント",
+    "contoso points": "Contoso ポイント",
+    "point": "Contoso ポイント",
+    "points": "Contoso ポイント",
+    "ポイント": "Contoso ポイント",
+}
+
+
+def _normalize_payment_method(method: str) -> str:
+    """支払い方法の入力を正式名称に正規化する。一致しなければ元の値を返す。"""
+    key = (method or "").strip().lower()
+    return _PAYMENT_METHOD_ALIASES.get(key, method)
+
+
 # ---------------------------------------------------------------------------
 # ツール定義（プロンプトの4ドメインに対応）
 # ---------------------------------------------------------------------------
@@ -151,6 +194,8 @@ def get_payment_policy(method: Optional[str] = None) -> dict:
     """利用可能な支払い方法、分割可否、返金処理日数を返します。
 
     method: 特定の支払い方法（任意）。指定するとその方法の詳細を返します。
+        日本語の正式名称のほか、英語・ローマ字・略称（例: credit_card, creditcard,
+        credit card, クレカ）も受け付けて正規化します。
     """
     pay = POLICIES["payment"]
     result: dict[str, Any] = {
@@ -159,13 +204,14 @@ def get_payment_policy(method: Optional[str] = None) -> dict:
         "note": pay["note"],
     }
     if method:
-        refund = pay["refund_processing_days"].get(method)
-        result["method"] = method
-        result["supported"] = method in pay["methods"]
+        canonical = _normalize_payment_method(method)
+        refund = pay["refund_processing_days"].get(canonical)
+        result["method"] = canonical
+        result["supported"] = canonical in pay["methods"]
         result["refund_processing_days"] = refund
-        if method in pay["methods"]:
+        if canonical in pay["methods"]:
             result["summary"] = (
-                f"{method}はご利用いただけます。"
+                f"{canonical}はご利用いただけます。"
                 + (f"返金処理は{refund}です。" if refund else "")
             )
         else:

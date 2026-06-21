@@ -1,2 +1,59 @@
+# =============================================================================
+# Agent-EVL ルート .gitignore
+# =============================================================================
+
+# --- リポジトリ固有 ---
 # アンダースコア始まりのフォルダ（_report, _task など）を除外
 _*/
+# ローカル動作確認用の使い捨てスクリプト（シークレットを含む場合があるため除外）
+zzz.py
+
+# --- シークレット / 自動生成された環境ファイル（コミット禁止）---
+.env
+*.env
+!.env.example
+!*.env.example
+# ms-foundry-observability の deploy/init が生成する実値ファイル
+ms-foundry-observability/.env
+ms-foundry-observability/deploy.settings
+# ACR 名などデプロイ時に生成される一時ファイル
+.acr_name.txt
+*.acr_name.txt
+
+# --- Python ---
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ipynb_checkpoints/
+
+# --- Bicep / IaC ビルド出力 ---
+*.json.tmp
+
+# --- OS 生成ファイル ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- エディタ / IDE ---
+.idea/
+*.swp
+*.swo
+*~
+
+# --- ログ ---
+*.log

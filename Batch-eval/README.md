@@ -10,8 +10,8 @@ Microsoft Foundry の **バッチ評価（cloud evaluation）** と **App Insigh
 
 | パス | 説明 |
 |---|---|
-| `infra/` | Bicep（Foundry・モデル・App Insights・Log Analytics） |
-| `scripts/` | デプロイ / MCP デプロイ / 後片付けスクリプト |
-| `agent/` | 検証用エージェント作成（MCP ツール付き / トレース生成） |
-| `mcp/` | Contoso ポリシー MCP サーバー（FastMCP / ACA ホスト） |
+| `infra/` | APIM ポリシー（`apim-aif-policy.xml`）のみ |
 | `eval/` | バッチ評価・トレース評価の実行コード |
+| [`../agent-aif-prompt-agent/`](../agent-aif-prompt-agent/) | 検証用 **プロンプトエージェント**（MCP ツール付き / トレース生成）。リポジトリ ルート直下に移動・昇格 |
+| [`../ms-foundry-observability/`](../ms-foundry-observability/) | Foundry 可観測性 環境構築（Bicep + デプロイ/後片付けスクリプト）。リポジトリ ルート直下に移動 |
+| [`../mcp/`](../mcp/) | Contoso ポリシー MCP サーバー（FastMCP / ACA ホスト）+ `deploy-mcp.ps1`（リポジトリ ルート直下に移動） |

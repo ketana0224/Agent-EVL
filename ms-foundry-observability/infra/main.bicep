@@ -25,22 +25,22 @@ param location string = 'eastus2'
 @description('リソース名のベースとなるプレフィックス（標準プレフィックスで新規作成）。')
 @minLength(3)
 @maxLength(12)
-param namePrefix string = 'agenteval'
+param namePrefix string = 'foundryobs'
 
 @description('リソース名の一意サフィックス。既定はサブスクリプション+プレフィックスから生成。')
 param nameSuffix string = substring(uniqueString(subscription().subscriptionId, namePrefix), 0, 5)
 
 @description('作成する Resource Group 名（rg- プレフィックス）。')
-param resourceGroupName string = 'rg-${namePrefix}-batcheval'
+param resourceGroupName string = 'rg-${namePrefix}-observability'
 
 @description('ジャッジ（LLM評価器）用 GPT モデル名。')
-param judgeModelName string = 'gpt-4.1-mini'
+param judgeModelName string = 'gpt-5.4'
 
 @description('ジャッジ用 GPT モデルのバージョン。')
-param judgeModelVersion string = '2025-04-14'
+param judgeModelVersion string = '2026-03-05'
 
 @description('ジャッジ用モデルデプロイのデプロイ名（SDKから参照する名前）。')
-param judgeDeploymentName string = 'gpt-4.1-mini'
+param judgeDeploymentName string = 'gpt-5.4'
 
 @description('ジャッジ用モデルの SKU 種別。')
 @allowed([
@@ -75,7 +75,7 @@ resource rg 'Microsoft.Resources/resourceGroups@2024-03-01' = {
 // ----------------------------------------------------------------------------
 
 module resources 'modules/resources.bicep' = {
-  name: 'batch-eval-resources'
+  name: 'foundry-observability-resources'
   scope: rg
   params: {
     location: location

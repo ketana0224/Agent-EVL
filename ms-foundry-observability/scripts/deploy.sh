@@ -1,25 +1,41 @@
 #!/usr/bin/env bash
 # =============================================================================
-# Agent 評価基盤（バッチ評価）デプロイ - Bash / Azure CLI 版
+# Microsoft Foundry 可観測性 環境構築 デプロイ - Bash / Azure CLI 版
+# リソース名・リージョン・モデル設定は deploy.settings（init-config.sh で生成）から
+# 読み込みます。先に ./init-config.sh を実行して設定ファイルを生成・編集してください。
 # TenantID / SubscriptionID は環境変数 AZURE_TENANT_ID / AZURE_SUBSCRIPTION_ID、
-# または TENANT_ID / SUBSCRIPTION_ID から取得します。未設定時は現在の az ログイン
-# コンテキスト（az account show）を使用します。
-#   Location : eastus2
+# または現在の az ログイン コンテキストから取得します。
 # =============================================================================
 set -euo pipefail
 
 TENANT_ID="${TENANT_ID:-${AZURE_TENANT_ID:-}}"
 SUBSCRIPTION_ID="${SUBSCRIPTION_ID:-${AZURE_SUBSCRIPTION_ID:-}}"
-LOCATION="${LOCATION:-${AZURE_LOCATION:-eastus2}}"
-DEPLOYMENT_NAME="${DEPLOYMENT_NAME:-${DEPLOYMENT_NAME_PREFIX:-batch-eval}-$(date +%Y%m%d%H%M%S)}"
 SKIP_RBAC="${SKIP_RBAC:-false}"
+PURGE_SOFT_DELETED="${PURGE_SOFT_DELETED:-false}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
-BICEP_PARAM="$REPO_ROOT/infra/main.bicepparam"
-ENV_FILE="$REPO_ROOT/eval/.env"
+TEMPLATE_FILE="$REPO_ROOT/infra/main.bicep"
+ENV_FILE="$REPO_ROOT/.env"
+SETTINGS_FILE="${SETTINGS_FILE:-$REPO_ROOT/deploy.settings}"
 
-echo "== Agent 評価基盤 (バッチ評価) デプロイ =="
+echo "== Microsoft Foundry 可観測性 環境構築 デプロイ =="
+
+# 設定ファイル読み込み
+if [[ ! -f "$SETTINGS_FILE" ]]; then
+  echo "設定ファイルが見つかりません: $SETTINGS_FILE" >&2
+  echo "先に ./init-config.sh を実行して設定ファイルを生成してください。" >&2
+  exit 1
+fi
+set -a
+# shellcheck disable=SC1090
+source "$SETTINGS_FILE"
+set +a
+: "${LOCATION:?deploy.settings に LOCATION がありません}"
+: "${NAME_PREFIX:?deploy.settings に NAME_PREFIX がありません}"
+: "${RESOURCE_GROUP_NAME:?deploy.settings に RESOURCE_GROUP_NAME がありません}"
+DEPLOYMENT_NAME="foundry-observability-$(date +%Y%m%d%H%M%S)"
+echo "設定: prefix=$NAME_PREFIX / RG=$RESOURCE_GROUP_NAME / location=$LOCATION"
 
 command -v az >/dev/null 2>&1 || { echo "Azure CLI (az) が必要です。"; exit 1; }
 
@@ -46,12 +62,39 @@ echo "サブスクリプション設定: $SUBSCRIPTION_ID"
 
 DEPLOYER_OBJECT_ID="$(az ad signed-in-user show --query id -o tsv)"
 
+# ソフトデリート済み Foundry アカウントの衰突確認
+COLLISIONS="$(az cognitiveservices account list-deleted --only-show-errors -o json \
+  | python3 -c "import sys,json;print('\n'.join(a['name']+'|'+a['location']+'|'+a['id'].split('/')[4] for a in json.load(sys.stdin) if a['name'].startswith('aif-${NAME_PREFIX}-')))")"
+if [[ -n "$COLLISIONS" ]]; then
+  if [[ "$PURGE_SOFT_DELETED" == "true" ]]; then
+    while IFS='|' read -r CNAME CLOC CRG; do
+      [[ -z "$CNAME" ]] && continue
+      echo "  purge (soft-deleted): $CNAME"
+      az cognitiveservices account purge --location "$CLOC" --resource-group "$CRG" --name "$CNAME" --only-show-errors
+    done <<< "$COLLISIONS"
+  else
+    echo "ソフトデリート済みの Foundry アカウントが存在します:" >&2
+    echo "$COLLISIONS" | cut -d'|' -f1 >&2
+    echo "PURGE_SOFT_DELETED=true を付けて再実行するか、手動で purge してください。" >&2
+    exit 1
+  fi
+fi
+
 # デプロイ
 echo "Bicep をデプロイします (deployment: $DEPLOYMENT_NAME)..."
 az deployment sub create \
   --name "$DEPLOYMENT_NAME" \
   --location "$LOCATION" \
-  --parameters "$BICEP_PARAM" \
+  --template-file "$TEMPLATE_FILE" \
+  --parameters \
+    location="$LOCATION" \
+    namePrefix="$NAME_PREFIX" \
+    resourceGroupName="$RESOURCE_GROUP_NAME" \
+    judgeModelName="$JUDGE_MODEL_NAME" \
+    judgeModelVersion="$JUDGE_MODEL_VERSION" \
+    judgeDeploymentName="$JUDGE_DEPLOYMENT_NAME" \
+    judgeModelSkuName="$JUDGE_MODEL_SKU_NAME" \
+    judgeModelCapacity="$JUDGE_MODEL_CAPACITY" \
   --only-show-errors \
   -o none
 
@@ -96,7 +139,7 @@ fi
 
 # .env 生成
 cat > "$ENV_FILE" <<EOF
-# 自動生成 (scripts/deploy.sh) - $(date -u +%Y-%m-%dT%H:%M:%SZ)
+# 自動生成 (ms-foundry-observability/scripts/deploy.sh) - $(date -u +%Y-%m-%dT%H:%M:%SZ)
 AZURE_TENANT_ID=$TENANT_ID
 AZURE_SUBSCRIPTION_ID=$SUBSCRIPTION_ID
 AZURE_RESOURCE_GROUP=$RESOURCE_GROUP_NAME
@@ -113,3 +156,4 @@ echo "Resource Group : $RESOURCE_GROUP_NAME"
 echo "Project        : $PROJECT_ENDPOINT"
 echo "Judge model    : $JUDGE_DEPLOYMENT_NAME"
 echo "App Insights   : $APPINSIGHTS_NAME"
+echo "Env file       : $ENV_FILE"
