@@ -93,7 +93,7 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=$appInsightsConn
 APPLICATIONINSIGHTS_NAME=$appInsightsName
 CONTOSO_MCP_URL=$existingMcpUrl
 CONTOSO_MCP_KEY=$existingMcpKey
-ACA_RESOURCE_GROUP=rg-contoso-agent
+ACA_RESOURCE_GROUP=$resourceGroup
 ACA_APP_NAME=contoso-support-agent
 ACA_ENV_NAME=aca-contoso-agent
 "@

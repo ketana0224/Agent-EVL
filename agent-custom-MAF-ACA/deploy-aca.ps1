@@ -32,7 +32,7 @@ param(
     [string]$AppName,
     [string]$EnvName,
     [string]$FoundryResourceGroup,
-    [string]$AiRole = 'Azure AI User',
+    [string]$AiRole = 'Azure AI Developer',
     [switch]$SkipRbac
 )
 
@@ -57,7 +57,7 @@ foreach ($line in Get-Content $EnvFile) {
 
 if (-not $SubscriptionId)        { $SubscriptionId        = $envMap['AZURE_SUBSCRIPTION_ID'] }
 if (-not $Location)              { $Location              = if ($envMap['AZURE_LOCATION']) { $envMap['AZURE_LOCATION'] } else { 'eastus2' } }
-if (-not $ResourceGroup)         { $ResourceGroup         = if ($envMap['ACA_RESOURCE_GROUP']) { $envMap['ACA_RESOURCE_GROUP'] } else { 'rg-contoso-agent' } }
+if (-not $ResourceGroup)         { $ResourceGroup         = if ($envMap['ACA_RESOURCE_GROUP']) { $envMap['ACA_RESOURCE_GROUP'] } else { $envMap['AZURE_RESOURCE_GROUP'] } }
 if (-not $AppName)               { $AppName               = if ($envMap['ACA_APP_NAME']) { $envMap['ACA_APP_NAME'] } else { 'contoso-support-agent' } }
 if (-not $EnvName)               { $EnvName               = if ($envMap['ACA_ENV_NAME']) { $envMap['ACA_ENV_NAME'] } else { 'aca-contoso-agent' } }
 if (-not $FoundryResourceGroup)  { $FoundryResourceGroup  = $envMap['AZURE_RESOURCE_GROUP'] }
@@ -88,7 +88,10 @@ az provider register --namespace Microsoft.ContainerRegistry --wait 2>$null | Ou
 # --- 1. RG 確認 ----------------------------------------------------------------
 az group create -n $ResourceGroup -l $Location --only-show-errors | Out-Null
 
-# --- 2. containerapp up（ソースからクラウドビルド） -----------------------------
+# --- 2. Dockerfile でイメージをビルドして Container App をデプロイ ---------------
+# 注: `az containerapp up --source` は Dockerfile があっても Oryx ビルドパックを
+#     優先し、FastAPI アプリを gunicorn の既定 (application:app) で起動して失敗する。
+#     そのため ACR にイメージを明示ビルド (Dockerfile 使用) してからデプロイする。
 Write-Host "[1/5] イメージをビルドして Container App をデプロイ（数分かかります）..." -ForegroundColor Yellow
 $envVars = @(
     "PROJECT_ENDPOINT=$projectEndpoint",
@@ -100,18 +103,50 @@ if ($appInsightsConn) { $envVars += "APPLICATIONINSIGHTS_CONNECTION_STRING=$appI
 if ($mcpUrl)          { $envVars += "CONTOSO_MCP_URL=$mcpUrl" }
 if ($mcpKey)          { $envVars += "CONTOSO_MCP_KEY=$mcpKey" }
 
+# ACR 名（RG 内に無ければ作成）。英数字のみ・グローバル一意にするため suffix を付与。
+$acrName = ($envMap['ACA_ACR_NAME'])
+if (-not $acrName) {
+    $suffix  = -join ((97..122) + (48..57) | Get-Random -Count 6 | ForEach-Object { [char]$_ })
+    $acrName = "acaagent$suffix"
+}
+$existingAcr = az acr show -n $acrName -g $ResourceGroup --query name -o tsv 2>$null
+if (-not $existingAcr) {
+    Write-Host "      ACR を作成: $acrName" -ForegroundColor DarkGray
+    az acr create -n $acrName -g $ResourceGroup --sku Basic --admin-enabled true --only-show-errors | Out-Null
+}
+$image = "$acrName.azurecr.io/$($AppName):latest"
+
 Push-Location $repoRoot
 try {
-    az containerapp up `
-        --name $AppName `
-        --resource-group $ResourceGroup `
-        --location $Location `
-        --environment $EnvName `
-        --source . `
-        --ingress external `
-        --target-port 8000 `
-        --env-vars $envVars
-    if ($LASTEXITCODE -ne 0) { throw 'az containerapp up に失敗しました。' }
+    Write-Host "      Dockerfile から ACR ビルド: $image" -ForegroundColor DarkGray
+    az acr build --registry $acrName --image "$($AppName):latest" --file Dockerfile . --only-show-errors
+    if ($LASTEXITCODE -ne 0) { throw 'az acr build に失敗しました。' }
+
+    # Container Apps 環境を用意（無ければ作成）
+    $envExists = az containerapp env show -n $EnvName -g $ResourceGroup --query name -o tsv 2>$null
+    if (-not $envExists) {
+        Write-Host "      Container Apps 環境を作成: $EnvName" -ForegroundColor DarkGray
+        az containerapp env create -n $EnvName -g $ResourceGroup -l $Location --only-show-errors | Out-Null
+    }
+
+    $acrPassword = az acr credential show -n $acrName --query "passwords[0].value" -o tsv
+    $appExists = az containerapp show -n $AppName -g $ResourceGroup --query name -o tsv 2>$null
+    if ($appExists) {
+        # 先にレジストリ資格情報を登録してから image を更新する（更新時のプル認証を通すため）
+        az containerapp registry set -n $AppName -g $ResourceGroup `
+            --server "$acrName.azurecr.io" --username $acrName --password $acrPassword --only-show-errors | Out-Null
+        az containerapp update -n $AppName -g $ResourceGroup `
+            --image $image --set-env-vars $envVars --only-show-errors | Out-Null
+    }
+    else {
+        az containerapp create -n $AppName -g $ResourceGroup `
+            --environment $EnvName `
+            --image $image `
+            --registry-server "$acrName.azurecr.io" --registry-username $acrName --registry-password $acrPassword `
+            --ingress external --target-port 8000 `
+            --env-vars $envVars --only-show-errors | Out-Null
+    }
+    if ($LASTEXITCODE -ne 0) { throw 'Container App のデプロイに失敗しました。' }
 }
 finally {
     Pop-Location

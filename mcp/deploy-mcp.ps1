@@ -16,9 +16,9 @@
 
 [CmdletBinding()]
 param(
-    [string]$SubscriptionId   = $env:AZURE_SUBSCRIPTION_ID,
-    [string]$ResourceGroup    = ($env:AZURE_RESOURCE_GROUP    ?? 'rg-contoso-mcp'),
-    [string]$Location         = ($env:AZURE_LOCATION          ?? 'eastus2'),
+    [string]$SubscriptionId,
+    [string]$ResourceGroup,
+    [string]$Location,
     [string]$AppName          = ($env:CONTOSO_MCP_APP_NAME    ?? 'contoso-policy-mcp'),
     [string]$EnvName          = ($env:CONTOSO_MCP_ENV_NAME    ?? 'aca-contoso-mcp'),
     [string]$ApiKey           = ''
@@ -28,6 +28,23 @@ $ErrorActionPreference = 'Stop'
 $mcpDir   = $PSScriptRoot
 
 Write-Host '== Contoso MCP サーバー デプロイ (Azure Container Apps) ==' -ForegroundColor Cyan
+
+# --- ルートの .env から接続情報を取得（他リソースと RG を揃える）---------------
+$repoRoot = Split-Path -Parent $mcpDir
+$rootEnv  = Join-Path $repoRoot '.env'
+$envMap   = @{}
+if (Test-Path $rootEnv) {
+    foreach ($line in Get-Content $rootEnv) {
+        $t = $line.Trim()
+        if ($t -and -not $t.StartsWith('#') -and $t.Contains('=')) {
+            $k, $v = $t -split '=', 2
+            $envMap[$k.Trim()] = $v.Trim()
+        }
+    }
+}
+if (-not $SubscriptionId) { $SubscriptionId = $envMap['AZURE_SUBSCRIPTION_ID'] ?? $env:AZURE_SUBSCRIPTION_ID }
+if (-not $ResourceGroup)  { $ResourceGroup  = $envMap['AZURE_RESOURCE_GROUP']  ?? $env:AZURE_RESOURCE_GROUP ?? 'rg-contoso-mcp' }
+if (-not $Location)       { $Location       = $envMap['AZURE_LOCATION']        ?? $env:AZURE_LOCATION ?? 'eastus2' }
 
 # --- 0. 前提確認 ---------------------------------------------------------------
 if (-not (Get-Command az -ErrorAction SilentlyContinue)) {
