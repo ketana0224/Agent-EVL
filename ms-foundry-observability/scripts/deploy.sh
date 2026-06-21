@@ -15,8 +15,9 @@ PURGE_SOFT_DELETED="${PURGE_SOFT_DELETED:-false}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
+GIT_ROOT="$(dirname "$REPO_ROOT")"
 TEMPLATE_FILE="$REPO_ROOT/infra/main.bicep"
-ENV_FILE="$REPO_ROOT/.env"
+ENV_FILE="$GIT_ROOT/.env"
 SETTINGS_FILE="${SETTINGS_FILE:-$REPO_ROOT/deploy.settings}"
 
 echo "== Microsoft Foundry 可観測性 環境構築 デプロイ =="
@@ -150,6 +151,17 @@ APPLICATIONINSIGHTS_CONNECTION_STRING=$APPINSIGHTS_CONNSTR
 APPLICATIONINSIGHTS_NAME=$APPINSIGHTS_NAME
 EOF
 
+# 同一セッションへもエクスポート（source した場合に後続手順が即利用できる）。
+# ※ このセッション限り有効。別ターミナル / Python からは上記 .env ファイルが担保します。
+export AZURE_TENANT_ID="$TENANT_ID"
+export AZURE_SUBSCRIPTION_ID="$SUBSCRIPTION_ID"
+export AZURE_RESOURCE_GROUP="$RESOURCE_GROUP_NAME"
+export PROJECT_ENDPOINT="$PROJECT_ENDPOINT"
+export MODEL_DEPLOYMENT_NAME="$JUDGE_DEPLOYMENT_NAME"
+export JUDGE_MODEL_DEPLOYMENT_NAME="$JUDGE_DEPLOYMENT_NAME"
+export APPLICATIONINSIGHTS_CONNECTION_STRING="$APPINSIGHTS_CONNSTR"
+export APPLICATIONINSIGHTS_NAME="$APPINSIGHTS_NAME"
+
 echo ""
 echo "== 完了 =="
 echo "Resource Group : $RESOURCE_GROUP_NAME"
@@ -157,3 +169,7 @@ echo "Project        : $PROJECT_ENDPOINT"
 echo "Judge model    : $JUDGE_DEPLOYMENT_NAME"
 echo "App Insights   : $APPINSIGHTS_NAME"
 echo "Env file       : $ENV_FILE"
+echo ""
+echo "次の手順:"
+echo "  - 生成された .env ($ENV_FILE) を評価コード・各エージェントの setup-env が参照します。"
+echo "  - このスクリプトを 'source ./deploy.sh' で実行した場合、接続情報は同セッションの環境変数としても利用できます。"

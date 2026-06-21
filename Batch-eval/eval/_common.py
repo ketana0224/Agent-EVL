@@ -10,8 +10,15 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-# eval/.env を読み込む（deploy スクリプトが自動生成）
-_ENV_PATH = Path(__file__).resolve().parent / ".env"
+# .env を読み込む。deploy スクリプト (ms-foundry-observability/scripts/deploy.ps1) が
+# リポジトリ ルートに .env を生成するため、それを優先して参照する。
+# 無ければ従来どおり eval/.env（隣接）にフォールバックする。
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+_ENV_CANDIDATES = (
+    _REPO_ROOT / ".env",
+    Path(__file__).resolve().parent / ".env",
+)
+_ENV_PATH = next((p for p in _ENV_CANDIDATES if p.exists()), _ENV_CANDIDATES[0])
 load_dotenv(dotenv_path=_ENV_PATH)
 
 

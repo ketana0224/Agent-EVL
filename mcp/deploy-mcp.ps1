@@ -71,6 +71,11 @@ finally {
     Pop-Location
 }
 
+# コールドスタート（scale-to-zero による初回タイムアウト）を防ぐため最小レプリカを 1 に固定。
+# `containerapp up` は --min-replicas を受け付けないため、デプロイ後に update で設定する。
+Write-Host "  最小レプリカを 1 に設定（コールドスタート回避）..." -ForegroundColor DarkGray
+az containerapp update -n $AppName -g $ResourceGroup --min-replicas 1 --only-show-errors | Out-Null
+
 # --- 4. 公開 URL 取得 -----------------------------------------------------------
 $fqdn = az containerapp show -n $AppName -g $ResourceGroup --query properties.configuration.ingress.fqdn -o tsv
 if ([string]::IsNullOrWhiteSpace($fqdn)) {

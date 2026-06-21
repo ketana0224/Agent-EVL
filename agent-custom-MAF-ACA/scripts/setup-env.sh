@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # MAF ホスト型エージェント（ACA）用の .env を生成。
 # 既存の Foundry プロジェクトをそのまま使うため、観測基盤の接続情報を引き継ぐ。
-# ../ms-foundry-observability/.env から接続情報を取得し、このフォルダ直下の .env を生成する。
+# ルートの .env から接続情報を取得し、このフォルダ直下の .env を生成する。
 # 既存 .env の CONTOSO_MCP_URL / CONTOSO_MCP_KEY は維持する。
 #
 # 環境変数:
-#   OBSERVABILITY_ENV   観測基盤 .env のパス（既定: ../ms-foundry-observability/.env）
+#   OBSERVABILITY_ENV   接続情報元 .env のパス（既定: リポジトリ ルートの .env）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,13 +14,13 @@ ENV_FILE="$REPO_ROOT/.env"
 
 echo "== MAF ホスト型エージェント（ACA）用 .env 生成 =="
 
-OBSERVABILITY_ENV="${OBSERVABILITY_ENV:-$(dirname "$REPO_ROOT")/ms-foundry-observability/.env}"
+OBSERVABILITY_ENV="${OBSERVABILITY_ENV:-$(dirname "$REPO_ROOT")/.env}"
 if [[ ! -f "$OBSERVABILITY_ENV" ]]; then
-  echo "ERROR: ms-foundry-observability/.env が見つかりません: $OBSERVABILITY_ENV" >&2
+  echo "ERROR: ルートの .env が見つかりません: $OBSERVABILITY_ENV" >&2
   echo "       先に ../ms-foundry-observability をデプロイするか、OBSERVABILITY_ENV を指定してください。" >&2
   exit 1
 fi
-echo "ms-foundry-observability/.env を検出: $OBSERVABILITY_ENV"
+echo "観測基盤 .env を検出: $OBSERVABILITY_ENV"
 
 get_val() { grep -E "^$1=" "$OBSERVABILITY_ENV" | head -n1 | cut -d= -f2- || true; }
 

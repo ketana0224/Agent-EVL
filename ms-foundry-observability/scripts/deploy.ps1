@@ -10,7 +10,7 @@
     3. RBAC を付与
         - 実行ユーザー        -> Foundry アカウントに「Foundry User」
         - プロジェクト MI     -> Application Insights に「Monitoring Reader」「Log Analytics Reader」
-    4. .env を生成（このフォルダ直下。評価コードが参照する環境変数）
+    4. .env を生成（リポジトリ ルート。評価コード・各エージェントの setup-env が参照する接続情報）
 
 .NOTES
     リソース名・リージョン・モデル設定は deploy.settings で管理します。
@@ -30,8 +30,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot     = Split-Path -Parent $PSScriptRoot
+$gitRoot      = Split-Path -Parent $repoRoot
 $templateFile = Join-Path $repoRoot 'infra\main.bicep'
-$envFile      = Join-Path $repoRoot '.env'
+$envFile      = Join-Path $gitRoot '.env'
 if (-not $SettingsFile) { $SettingsFile = Join-Path $repoRoot 'deploy.settings' }
 
 Write-Host '== Microsoft Foundry 可観測性 環境構築 デプロイ ==' -ForegroundColor Cyan
@@ -97,20 +98,32 @@ $deployerObjectId = az ad signed-in-user show --query id -o tsv
 $softDeleted = az cognitiveservices account list-deleted --only-show-errors -o json | ConvertFrom-Json
 $collisions  = @($softDeleted | Where-Object { $_.name -like "aif-$NamePrefix-*" })
 if ($collisions) {
-    if ($PurgeSoftDeleted) {
-        foreach ($c in $collisions) {
-            Write-Host "  purge (soft-deleted): $($c.name)" -ForegroundColor Yellow
-            az cognitiveservices account purge `
-                --location $c.location `
-                --resource-group (($c.id -split '/')[4]) `
-                --name $c.name --only-show-errors | Out-Null
-            if ($LASTEXITCODE -ne 0) { throw "purge に失敗しました: $($c.name)" }
-        }
+    # ソフトデリート済みの同名アカウントは衝突要因。無視して進めるため自動 purge する。
+    foreach ($c in $collisions) {
+        # 削除済みアカウントの id は
+        # .../resourceGroups/<rg>/deletedAccounts/<name> 形式。RG を正しく抽出する。
+        if ($c.id -match '/resourceGroups/([^/]+)/') { $deletedRg = $Matches[1] }
+        else { throw "リソースグループを id から抽出できませんでした: $($c.id)" }
+        Write-Host "  purge (soft-deleted): $($c.name) [rg=$deletedRg]" -ForegroundColor Yellow
+        az cognitiveservices account purge `
+            --location $c.location `
+            --resource-group $deletedRg `
+            --name $c.name --only-show-errors | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "purge に失敗しました: $($c.name)" }
     }
-    else {
-        $names = ($collisions | ForEach-Object { $_.name }) -join ', '
-        throw "ソフトデリート済みの Foundry アカウントが存在します: $names`n-PurgeSoftDeleted を付けて再実行するか、手動で purge してください。"
+
+    # purge は非同期。soft-deleted リストから消えるまで待ってからデプロイする
+    # （未完了のままだと FlagMustBeSetForRestore で失敗するため）。
+    $targets = @($collisions | ForEach-Object { $_.name })
+    for ($i = 0; $i -lt 30; $i++) {
+        Start-Sleep -Seconds 10
+        $still = az cognitiveservices account list-deleted --only-show-errors -o json | ConvertFrom-Json
+        $remaining = @($still | Where-Object { $targets -contains $_.name })
+        if (-not $remaining) { break }
+        Write-Host "  purge 完了待ち... ($($remaining.Count) 件残り)" -ForegroundColor DarkYellow
     }
+    if ($remaining) { throw "purge の完了待ちがタイムアウトしました: $($remaining.name -join ', ')" }
+    Write-Host '  purge 完了。' -ForegroundColor Green
 }
 
 # --- 2b. デプロイ --------------------------------------------------------------
@@ -190,6 +203,18 @@ APPLICATIONINSIGHTS_NAME=$appInsightsName
 Set-Content -Path $envFile -Value $envContent -Encoding utf8
 Write-Host "環境変数を書き出しました: $envFile" -ForegroundColor Green
 
+# 同一セッションへもエクスポート（後続手順がファイル読み込みなしで即利用できる）。
+# ※ このセッション限り有効。別ターミナル / Python からは上記 .env ファイルが担保します。
+$env:AZURE_TENANT_ID                        = $TenantId
+$env:AZURE_SUBSCRIPTION_ID                  = $SubscriptionId
+$env:AZURE_RESOURCE_GROUP                   = $resourceGroupName
+$env:PROJECT_ENDPOINT                       = $projectEndpoint
+$env:MODEL_DEPLOYMENT_NAME                  = $judgeDeploymentName
+$env:JUDGE_MODEL_DEPLOYMENT_NAME            = $judgeDeploymentName
+$env:APPLICATIONINSIGHTS_CONNECTION_STRING  = $appInsightsConnStr
+$env:APPLICATIONINSIGHTS_NAME               = $appInsightsName
+Write-Host '現在のセッションに環境変数をエクスポートしました（後続手順でそのまま利用可）。' -ForegroundColor Green
+
 Write-Host ''
 Write-Host '== 完了 ==' -ForegroundColor Cyan
 Write-Host "Resource Group : $resourceGroupName"
@@ -199,4 +224,5 @@ Write-Host "App Insights   : $appInsightsName"
 Write-Host "Env file       : $envFile"
 Write-Host ''
 Write-Host '次の手順:' -ForegroundColor Yellow
-Write-Host "  - 生成された .env ($envFile) を評価コードから読み込んでください。"
+Write-Host "  - 生成された .env ($envFile) を評価コード・各エージェントの setup-env が参照します。"
+Write-Host '  - 同じターミナルなら接続情報は環境変数としても利用できます（PROJECT_ENDPOINT など）。'

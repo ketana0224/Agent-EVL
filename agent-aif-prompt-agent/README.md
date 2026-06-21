@@ -31,7 +31,7 @@ agent-aif-prompt-agent/
 ├── requirements.txt
 ├── .env.example
 └── scripts/
-    └── setup-env.ps1 / .sh  # .env 生成（観測基盤 .env から接続情報を引き継ぎ）
+    └── setup-env.ps1 / .sh  # .env 生成（ルートの .env から接続情報を引き継ぎ）
 ```
 
 ### アーキテクチャ
@@ -62,7 +62,7 @@ flowchart LR
 ## セットアップ手順
 
 ```powershell
-# 1. .env 生成（ms-foundry-observability/.env から接続情報を引き継ぎ）
+# 1. .env 生成（ルートの .env から接続情報を引き継ぎ）
 ./scripts/setup-env.ps1
 #   既存 .env の CONTOSO_MCP_URL / CONTOSO_MCP_KEY は維持されます
 

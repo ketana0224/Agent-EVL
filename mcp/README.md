@@ -86,38 +86,21 @@ cd mcp
 
 ## 🔎 後から URL / API キーを確認する
 
-デプロイ時の出力を控え忘れても、`az` で後から取得できます（`<...>` は実際の名前に置換）。
-
-### 公開 URL
-
-```powershell
-# FQDN を取得して /mcp を付与
-$fqdn = az containerapp show -n contoso-policy-mcp -g rg-contoso-mcp `
-  --query properties.configuration.ingress.fqdn -o tsv
-"https://$fqdn/mcp"
-```
-
-### API キー（`x-contoso-key`）
-
-API キーは Container App の環境変数 `CONTOSO_MCP_KEY` に保存されています。
+デプロイ時の出力を控え忘れても、`az` で後から取得できます。
+RG 名はデプロイ先によって異なるため、アプリ名（既定 `contoso-policy-mcp`）から自動検索します。
 
 ```powershell
-az containerapp show -n contoso-policy-mcp -g rg-contoso-mcp `
-  --query "properties.template.containers[0].env[?name=='CONTOSO_MCP_KEY'].value | [0]" -o tsv
-```
-
-### 一括確認
-
-```powershell
-$fqdn = az containerapp show -n contoso-policy-mcp -g rg-contoso-mcp `
-  --query properties.configuration.ingress.fqdn -o tsv
-$key = az containerapp show -n contoso-policy-mcp -g rg-contoso-mcp `
+# アプリ名から RG を自動特定
+$app  = az containerapp list --query "[?name=='contoso-policy-mcp'] | [0]" -o json | ConvertFrom-Json
+$rg   = $app.resourceGroup
+$fqdn = $app.properties.configuration.ingress.fqdn
+$key  = az containerapp show -n contoso-policy-mcp -g $rg `
   --query "properties.template.containers[0].env[?name=='CONTOSO_MCP_KEY'].value | [0]" -o tsv
 Write-Host "CONTOSO_MCP_URL=https://$fqdn/mcp"
 Write-Host "CONTOSO_MCP_KEY=$key"
 ```
 
-> アプリ名・RG を変更してデプロイした場合は、`-n` / `-g` をその値に合わせてください。
+> アプリ名を変更してデプロイした場合は、上記の `contoso-policy-mcp` をその値に合わせてください。
 > 一覧で名前が分からない場合は `az containerapp list -o table` で確認できます。
 
 ---

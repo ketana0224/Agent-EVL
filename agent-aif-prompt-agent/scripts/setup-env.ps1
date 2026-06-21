@@ -6,7 +6,7 @@
 .DESCRIPTION
     プロンプトエージェントは既存の Foundry プロジェクトをそのまま使うため、
     追加リソース（Cosmos/Storage/Search）や Capability Host のデプロイは不要です。
-    本スクリプトは ../ms-foundry-observability/.env から接続情報を引き継ぎ、
+    本スクリプトは リポジトリ ルートの .env（観測基盤が生成）から接続情報を引き継ぎ、
     このフォルダ直下の .env を生成します（create_agent.py が参照）。
 
     既存 .env の CONTOSO_MCP_URL / CONTOSO_MCP_KEY は維持されます。
@@ -21,8 +21,9 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = Split-Path -Parent $PSScriptRoot
-$envFile  = Join-Path $repoRoot '.env'
+$agentRoot = Split-Path -Parent $PSScriptRoot
+$repoRoot  = Split-Path -Parent $agentRoot
+$envFile   = Join-Path $agentRoot '.env'
 
 Write-Host '== プロンプトエージェント用 .env 生成 ==' -ForegroundColor Cyan
 
@@ -30,9 +31,9 @@ if ((Test-Path $envFile) -and -not $Force) {
     Write-Host "$envFile は既に存在します。CONTOSO_MCP_* は維持しつつ更新します。" -ForegroundColor Yellow
 }
 
-# --- ms-foundry-observability/.env から接続情報を取得 -------------------------
+# --- ルートの .env から接続情報を取得 -------------------------------------
 if (-not $ObservabilityEnv) {
-    $ObservabilityEnv = Join-Path (Split-Path -Parent $repoRoot) 'ms-foundry-observability\.env'
+    $ObservabilityEnv = Join-Path $repoRoot '.env'
 }
 $obs = @{}
 if (Test-Path $ObservabilityEnv) {
@@ -43,10 +44,10 @@ if (Test-Path $ObservabilityEnv) {
             $obs[$k.Trim()] = $v.Trim()
         }
     }
-    Write-Host "ms-foundry-observability/.env を検出: $ObservabilityEnv" -ForegroundColor Green
+    Write-Host "観測基盤 .env を検出: $ObservabilityEnv" -ForegroundColor Green
 }
 else {
-    throw "ms-foundry-observability/.env が見つかりません: $ObservabilityEnv`n先に ../ms-foundry-observability をデプロイするか、-ObservabilityEnv で明示指定してください。"
+    throw "ルートの .env が見つかりません: $ObservabilityEnv`n先に ../ms-foundry-observability をデプロイするか、-ObservabilityEnv で明示指定してください。"
 }
 
 $tenantId        = $obs['AZURE_TENANT_ID']
@@ -70,6 +71,10 @@ if (Test-Path $envFile) {
         if ($line -match '^CONTOSO_MCP_KEY=(.*)$') { $existingMcpKey = $Matches[1] }
     }
 }
+
+# フォルダの .env に無ければルートの .env（mcp デプロイが書き込む）から引き継ぐ
+if (-not $existingMcpUrl) { $existingMcpUrl = $obs['CONTOSO_MCP_URL'] }
+if (-not $existingMcpKey) { $existingMcpKey = $obs['CONTOSO_MCP_KEY'] }
 
 $envContent = @"
 # 自動生成 (agent-aif-prompt-agent/scripts/setup-env.ps1) - $(Get-Date -Format o)

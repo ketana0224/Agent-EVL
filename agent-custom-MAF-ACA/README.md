@@ -41,7 +41,7 @@ agent-custom-MAF-ACA/
 ├── deploy-aca.ps1       # ACA デプロイ（containerapp up + MI + RBAC）
 ├── smoke_test.py        # デプロイ後の疎通テスト（標準ライブラリのみ）
 └── scripts/
-    └── setup-env.ps1 / .sh   # .env 生成（観測基盤 .env から接続情報を引き継ぎ）
+    └── setup-env.ps1 / .sh   # .env 生成（ルートの .env から接続情報を引き継ぎ）
 ```
 
 ### アーキテクチャ
@@ -78,7 +78,7 @@ flowchart LR
 ## セットアップ
 
 ```powershell
-# 1. .env 生成（ms-foundry-observability/.env から接続情報を引き継ぎ）
+# 1. .env 生成（ルートの .env から接続情報を引き継ぎ）
 ./scripts/setup-env.ps1
 #   既存 .env の CONTOSO_MCP_URL / CONTOSO_MCP_KEY は維持されます
 ```
@@ -220,7 +220,7 @@ def _configure_observability() -> None:
 - 接続文字列は [`app/config.py`](app/config.py) の `appinsights_connection_string()` が
   環境変数 `APPLICATIONINSIGHTS_CONNECTION_STRING` から取得します。
 - 値の供給元:
-  - **ローカル**: `scripts/setup-env.ps1` / `.sh` が [`ms-foundry-observability/.env`](../ms-foundry-observability/) から引き継ぎ `.env` に書き込み
+  - **ローカル**: `scripts/setup-env.ps1` / `.sh` が リポジトリ ルートの `.env` から引き継ぎ `.env` に書き込み
   - **ACA**: `deploy-aca.ps1` が同値を Container App の環境変数として設定
 - 依存パッケージ: [`requirements.txt`](requirements.txt) の `azure-monitor-opentelemetry`
 

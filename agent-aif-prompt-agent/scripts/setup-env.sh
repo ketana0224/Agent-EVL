@@ -2,11 +2,11 @@
 # プロンプトエージェント実行用の .env を生成（インフラのデプロイは不要）。
 # プロンプトエージェントは既存の Foundry プロジェクトをそのまま使うため、
 # 追加リソースや Capability Host のデプロイは不要。
-# ../ms-foundry-observability/.env から接続情報を引き継ぎ、このフォルダ直下の .env を生成する。
+# ルートの .env から接続情報を引き継ぎ、このフォルダ直下の .env を生成する。
 # 既存 .env の CONTOSO_MCP_URL / CONTOSO_MCP_KEY は維持する。
 #
 # 環境変数:
-#   OBSERVABILITY_ENV   観測基盤 .env のパス（既定: ../ms-foundry-observability/.env）
+#   OBSERVABILITY_ENV   接続情報元 .env のパス（既定: リポジトリ ルートの .env）
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,13 +15,13 @@ ENV_FILE="$REPO_ROOT/.env"
 
 echo "== プロンプトエージェント用 .env 生成 =="
 
-OBSERVABILITY_ENV="${OBSERVABILITY_ENV:-$(dirname "$REPO_ROOT")/ms-foundry-observability/.env}"
+OBSERVABILITY_ENV="${OBSERVABILITY_ENV:-$(dirname "$REPO_ROOT")/.env}"
 if [[ ! -f "$OBSERVABILITY_ENV" ]]; then
-  echo "ERROR: ms-foundry-observability/.env が見つかりません: $OBSERVABILITY_ENV" >&2
+  echo "ERROR: ルートの .env が見つかりません: $OBSERVABILITY_ENV" >&2
   echo "       先に ../ms-foundry-observability をデプロイするか、OBSERVABILITY_ENV を指定してください。" >&2
   exit 1
 fi
-echo "ms-foundry-observability/.env を検出: $OBSERVABILITY_ENV"
+echo "観測基盤 .env を検出: $OBSERVABILITY_ENV"
 
 get_val() { grep -E "^$1=" "$OBSERVABILITY_ENV" | head -n1 | cut -d= -f2- || true; }
 
@@ -45,6 +45,10 @@ if [[ -f "$ENV_FILE" ]]; then
   EXISTING_MCP_URL="$(grep -E '^CONTOSO_MCP_URL=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
   EXISTING_MCP_KEY="$(grep -E '^CONTOSO_MCP_KEY=' "$ENV_FILE" | head -n1 | cut -d= -f2- || true)"
 fi
+
+# フォルダの .env に無ければルートの .env（mcp デプロイが書き込む）から引き継ぐ
+[[ -z "$EXISTING_MCP_URL" ]] && EXISTING_MCP_URL="$(get_val CONTOSO_MCP_URL)"
+[[ -z "$EXISTING_MCP_KEY" ]] && EXISTING_MCP_KEY="$(get_val CONTOSO_MCP_KEY)"
 
 cat > "$ENV_FILE" <<EOF
 # 自動生成 (agent-aif-prompt-agent/scripts/setup-env.sh) - $(date -u +%Y-%m-%dT%H:%M:%SZ)
