@@ -11,11 +11,11 @@
     1. .env を読み込み（scripts/setup-env で生成。PROJECT_ENDPOINT / モデル / MCP /
        App Insights / Foundry RG などを取得）
     2. Azure CLI / containerapp 拡張 / リソースプロバイダーを確認・登録
-    3. `az containerapp up --source` でクラウドビルド（ローカル Docker 不要）し、
+    3. `az acr build --file Dockerfile` で ACR にイメージを明示ビルド（ローカル Docker 不要）し、
        ACR + Container Apps 環境 + Container App（外部 HTTPS Ingress, port 8000）を作成
     4. システム割り当てマネージド ID を有効化
     5. その MI に、Foundry アカウント（PROJECT_ENDPOINT のプロジェクトが属する
-       Cognitive Services アカウント）への「Azure AI User」を付与（推論・エージェント実行）
+       Cognitive Services アカウント）への「Azure AI Developer」を付与（推論・エージェント実行）
     6. 公開 URL をコンソールに出力
 
 .NOTES
